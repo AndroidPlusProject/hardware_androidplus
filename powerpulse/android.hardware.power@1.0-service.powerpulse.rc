@@ -1,0 +1,6 @@
+service power-hal-1-0 /vendor/bin/hw/android.hardware.power@1.0-service.powerpulse
+    class hal
+    user root
+    group root
+    ioprio rt 4
+    writepid /dev/cpuset/foreground/tasks
