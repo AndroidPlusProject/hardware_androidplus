@@ -29,7 +29,6 @@
 #include <hardware/power.h>
 
 #include "Power.h"
-#include "Utils.h"
 
 #include <libpowerpulse.h>
 
@@ -38,8 +37,6 @@ namespace hardware {
 namespace power {
 namespace V1_0 {
 namespace implementation {
-
-using ::vendor::nexus::universal7420::Utils;
 
 Power::Power()
 {
@@ -56,30 +53,6 @@ Power::Power()
 	mTouchControlPath = "";
 	mTouchkeysEnabled = true;
 	mIsDT2WEnabled = false;
-
-	//
-	// reading, asserting
-	//
-	string touchDeviceName;
-	if (!Utils::read(POWER_TOUCHSCREEN_NAME, touchDeviceName)) {
-		LOG_ALWAYS_FATAL("%s: failed to read name of touchscreen sysfs-device", __func__);
-	}
-
-	if (touchDeviceName == POWER_TOUCHSCREEN_NAME_EXPECT) {
-		mVariant = SecDeviceVariant::FLAT;
-		mTouchControlPath = POWER_TOUCHSCREEN_ENABLED_FLAT;
-	} else {
-		mVariant = SecDeviceVariant::EDGE;
-		mTouchControlPath = POWER_TOUCHSCREEN_ENABLED_EDGE;
-	}
-
-	//
-	// initial device-setup
-	//
-
-	// enable all input-devices
-	setInputState(true);
-	setFingerprintState(true);
 
 	ALOGV("%s: exit;", __func__);
 }
@@ -106,36 +79,17 @@ Power::~Power() { }
 
 // Methods from ::android::hardware::power::V1_0::IPower follow.
 Return<void> Power::setInteractive(bool interactive) {
-	auto begin = Utils::getTime();
-
 	ALOGV("%s: enter; interactive=%d", __func__, interactive ? 1 : 0);
 	power_lock();
 
 	this->mIsInteractive = interactive;
 
-	if (!interactive && Utils::screenIsOn()) {
-		//ALOGW("%s: not disabling interactive state when screen is still on", __func__);
-		goto exit;
-	}
-
 	if (!interactive) {
 		setProfile(SecPowerProfiles::SCREEN_OFF);
 	} else {
 		// reset to requested- or fallback-profile
-		resetProfile(500);
+		resetProfile();
 	}
-
-	// speed up the device a bit
-	/* Utils::write("/sys/kernel/hmp/boostpulse_duration", 2500000); // 2.5s
-	Utils::write("/sys/kernel/hmp/boostpulse", true); */
-
-	setInputState(interactive);
-
-exit:
-	auto end = Utils::getTime();
-	auto diff = end - begin;
-
-	ALOGV("%s: exit; took %lldms", __func__, diff.count());
 	return Void();
 }
 
@@ -194,7 +148,7 @@ Return<void> Power::powerHint(PowerHint hint, int32_t data)  {
 		case_uint32_t (PowerHint::INTERACTION):
 		{
 			ALOGV("%s: PowerHint::INTERACTION(%d)", __func__, data);
-			//boostpulse(data);
+			boostpulse(data);
 			break;
 		}
 		case_uint32_t (PowerHint::LAUNCH):
@@ -257,8 +211,7 @@ Return<int32_t> Power::getFeature(LineageFeature feature)  {
 
 		case_uint32_t (Feature::POWER_FEATURE_DOUBLE_TAP_TO_WAKE):
 		{
-			return (Utils::isFile(POWER_DT2W_ENABLED) &&
-			    Utils::canWrite(POWER_DT2W_ENABLED)) ? 1 : 0;
+			return 0;
 		}
 	}
 
@@ -274,35 +227,7 @@ void Power::boostpulse(int duration) {
 	if (duration <= 0) {
 		duration = (1000 / 60) * 10;
 	}
-
-	// get current profile data
-	/*const SecPowerProfile* data = Profiles::getProfileData(mCurrentProfile);
-
-	if (data->cpu.apollo.freq_boost) {
-		if (!Utils::updateCpuGov(0)) {
-			ALOGW("Failed to load current cpugov-configuration for APOLLO");
-#ifdef STRICT_BEHAVIOUR
-			return;
-#endif
-		}
-
-		Utils::writeCpuGov(0, "boost_freq", data->cpu.apollo.freq_boost);
-		Utils::writeCpuGov(0, "boostpulse_duration", duration * 1000);
-		Utils::writeCpuGov(0, "boostpulse", true);
-	}
-
-	if (data->cpu.atlas.freq_boost) {
-		if (!Utils::updateCpuGov(4)) {
-			ALOGW("Failed to load current cpugov-configuration for ATLAS");
-#ifdef STRICT_BEHAVIOUR
-			return;
-#endif
-		}
-
-		Utils::writeCpuGov(4, "boost_freq", data->cpu.atlas.freq_boost);
-		Utils::writeCpuGov(4, "boostpulse_duration", duration * 1000);
-		Utils::writeCpuGov(4, "boostpulse", true);
-	}*/
+	duration *= 1000;
 }
 
 void Power::setProfile(SecPowerProfiles profile) {
@@ -312,291 +237,30 @@ void Power::setProfile(SecPowerProfiles profile) {
 		return;
 	}
 
-	auto begin = Utils::getTime();
-
 	char* profileName = (char*) SecPowerProfilesToString(profile);
 	if (SecPowerProfilesToString(mCurrentProfile) == profileName) {
 		ALOGI("%s: already applied profile %s (%d)", __func__, profileName, profile);
 		return;
 	}
-
-	// store it
 	mCurrentProfile = profile;
 
  	ALOGI("%s: applying profile %s (%d)", __func__, profileName, profile);
-	/*pid_t pid = fork();
-	if (pid == -1) {
-		ALOGE("Failed to fork the power manager");
-		return;
-	} else if (pid == 0) {
-		execl("/vendor/bin/hw/powerpulse", "powerpulse", "--profile", profileName, NULL);
-		perror("execl");
-		_exit(EXIT_FAILURE);
-	} else {
-		int status;
-		waitpid(pid, &status, 0);
-		if (WIFEXITED(status)) {
-			ALOGI("powerpulse exited with status %d", WEXITSTATUS(status));
-		} else {
-			ALOGE("powerpulse exited abnormally");
-		}
-	}*/
 	PowerPulse_SetProfile(profileName);
-
-	/* // Disabled until further notice \\
-	// apply settings
-	const SecPowerProfile* data = Profiles::getProfileData(mCurrentProfile);
-
-	if (!data->enabled) {
-		return;
-	}
-
-	// online policy-cores before querying cpufreq-data
-	CPU_ONLINE(0);
-	CPU_ONLINE(4);
-
-	// Keep dynamic hotplugging disabled to 1.) ensure availability of all
-	// clusters when power-HAL gets a setInteractive()-event and 2.)
-	// to drastically lower the the screen-on-delay
-	Utils::write("/sys/power/enable_dm_hotplug", false);
-
-	if (data->cpu.enabled)
-	{
-		// CPU Cluster0
-		if (data->cpu.apollo.enabled) {
-			PROFILE_WRITE("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor", cpu.apollo, governor);
-
-			if (!Utils::updateCpuGov(0)) {
-				ALOGW("Failed to load current cpugov-configuration for APOLLO");
-#ifdef STRICT_BEHAVIOUR
-				return;
-#endif
-			}
-
-			// to keep frequencies in range while screen-on we use the cpugovs, but
-			// while screen-off it can happen that frequencies get increased too much
-			// make sure our limits are being applied to the then-limiting,
-			// not very reliable, files too
-			PROFILE_WRITE("/sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq", cpu.apollo, freq_min);
-			PROFILE_WRITE("/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq", cpu.apollo, freq_max);
-
-			PROFILE_WRITE("/sys/devices/system/cpu/cpu0/online", cpu.apollo.cores, core1);
-			PROFILE_WRITE("/sys/devices/system/cpu/cpu1/online", cpu.apollo.cores, core2);
-			PROFILE_WRITE("/sys/devices/system/cpu/cpu2/online", cpu.apollo.cores, core3);
-			PROFILE_WRITE("/sys/devices/system/cpu/cpu3/online", cpu.apollo.cores, core4);
-
-			cpu_apollo_write(freq_min);
-			cpu_apollo_write(freq_max);
-			cpu_apollo_write2(freq_hispeed, "hispeed_freq");
-
-			for (int i = 0; data->cpu.apollo.governor_data[i].name[0]; i++) {
-				Utils::writeCpuGov(0, data->cpu.apollo.governor_data[i].name,
-					std::string(data->cpu.apollo.governor_data[i].data));
-			}
-		}
-
-		// CPU Cluster1
-		if (data->cpu.atlas.enabled) {
-			PROFILE_WRITE("/sys/devices/system/cpu/cpu4/cpufreq/scaling_governor", cpu.atlas, governor);
-
-			if (!Utils::updateCpuGov(4)) {
-				ALOGW("Failed to load current cpugov-configuration for ATLAS");
-#ifdef STRICT_BEHAVIOUR
-				return;
-#endif
-			}
-
-			// to keep frequencies in range while screen-on we use the cpugovs, but
-			// while screen-off it can happen that frequencies get increased too much
-			// make sure our limits are being applied to the then-limiting,
-			// not very reliable, files too
-			PROFILE_WRITE("/sys/devices/system/cpu/cpu4/cpufreq/scaling_min_freq", cpu.atlas, freq_min);
-			PROFILE_WRITE("/sys/devices/system/cpu/cpu4/cpufreq/scaling_max_freq", cpu.atlas, freq_max);
-
-			PROFILE_WRITE("/sys/devices/system/cpu/cpu4/online", cpu.atlas.cores, core1);
-			PROFILE_WRITE("/sys/devices/system/cpu/cpu5/online", cpu.atlas.cores, core2);
-			PROFILE_WRITE("/sys/devices/system/cpu/cpu6/online", cpu.atlas.cores, core3);
-			PROFILE_WRITE("/sys/devices/system/cpu/cpu7/online", cpu.atlas.cores, core4);
-
-			cpu_atlas_write(freq_min);
-			cpu_atlas_write(freq_max);
-			cpu_atlas_write2(freq_hispeed, "hispeed_freq");
-
-			for (int i = 0; data->cpu.atlas.governor_data[i].name[0]; i++) {
-				Utils::writeCpuGov(4, data->cpu.atlas.governor_data[i].name,
-					std::string(data->cpu.atlas.governor_data[i].data));
-			}
-		}
-	}
-
-	// cpusets
-	if (data->cpusets.enabled) {
-		//PROFILE_WRITE("/dev/cpuset/cpus",                   cpusets, defaults);
-		//PROFILE_WRITE("/dev/cpuset/foreground/cpus",        cpusets, foreground);
-		//PROFILE_WRITE("/dev/cpuset/foreground/boost/cpus",  cpusets, foreground_boost);
-		//PROFILE_WRITE("/dev/cpuset/background/cpus",        cpusets, background);
-		//PROFILE_WRITE("/dev/cpuset/system-background/cpus", cpusets, system_background);
-		//PROFILE_WRITE("/dev/cpuset/top-app/cpus",           cpusets, top_app);
-	}
-
-	// IPA
-	if (data->ipa.enabled) {
-		Utils::write("/sys/power/ipa/enabled", "Y");
-		PROFILE_WRITE("/sys/power/ipa/control_temp", ipa, control_temp);
-	}
-
-	// GPU Defaults
-	if (data->gpu.enabled) {
-		if (data->gpu.dvfs.enabled) {
-			PROFILE_WRITE("/sys/devices/14ac0000.mali/dvfs_min_lock", gpu.dvfs, freq_min);
-			PROFILE_WRITE("/sys/devices/14ac0000.mali/dvfs_max_lock", gpu.dvfs, freq_max);
-		}
-		if (data->gpu.highspeed.enabled) {
-			PROFILE_WRITE("/sys/devices/14ac0000.mali/highspeed_clock", gpu.highspeed, freq);
-			PROFILE_WRITE("/sys/devices/14ac0000.mali/highspeed_load",  gpu.highspeed, load);
-		}
-	}
-
-	// Kernel Defaults
-	if (data->hmp.enabled) {
-		PROFILE_WRITE("/sys/kernel/hmp/boost",                   hmp, boost);
-		PROFILE_WRITE("/sys/kernel/hmp/semiboost",               hmp, semiboost);
-		//PROFILE_WRITE("/sys/kernel/hmp/power_migration",         hmp, power_migration);
-		PROFILE_WRITE("/sys/kernel/hmp/active_down_migration",   hmp, semiboost);
-		PROFILE_WRITE("/sys/kernel/hmp/aggressive_up_migration", hmp, aggressive_up_migration);
-		if (data->hmp.threshold.enabled) {
-			PROFILE_WRITE("/sys/kernel/hmp/down_threshold", hmp.threshold, down);
-			PROFILE_WRITE("/sys/kernel/hmp/up_threshold",   hmp.threshold, up);
-		}
-		if (data->hmp.sb_threshold.enabled) {
-			PROFILE_WRITE("/sys/kernel/hmp/sb_down_threshold", hmp.sb_threshold, down);
-			PROFILE_WRITE("/sys/kernel/hmp/sb_up_threshold",   hmp.sb_threshold, up);
-		}
-	}
-
-	if (data->kernel.enabled) {
-		// The power-efficient workqueue is useful for lower-power-situations, but
-		// contraproductive in high-performance situations. This should reflect in
-		// the static power-profiles
-		PROFILE_WRITE("/sys/module/workqueue/parameters/power_efficient", kernel, pewq);
-	}
-
-	// Slow Mode Defaults
-	if (data->slow.enabled) {
-		PROFILE_WRITE("/sys/devices/virtual/sec/sec_slow/enforced_slow_mode", slow, mode_toggle);
-		PROFILE_WRITE("/sys/devices/virtual/sec/sec_slow/timer_rate",         slow, timer_rate);
-	}
-
-	// Input-Booster Defaults
-	if (data->input_booster.enabled) {
-		PROFILE_WRITE("/sys/class/input_booster/tail", input_booster, tail);
-		PROFILE_WRITE("/sys/class/input_booster/head", input_booster, head);
-	}
-	*/
-
-	auto end = Utils::getTime();
-	auto diff = end - begin;
-
-	ALOGV("%s: exit; took %lldms", __func__, diff.count());
 }
 
-void Power::setProfile(SecPowerProfiles profile, int delay) {
-	DELAY(setProfile(profile), delay);
-}
-
-void Power::resetProfile(int delay) {
+void Power::resetProfile() {
 	if (mRequestedProfile == SecPowerProfiles::INVALID) {
-		setProfile(SecPowerProfiles::BALANCED, delay);
+		setProfile(SecPowerProfiles::BALANCED);
 	} else {
-		setProfile(mRequestedProfile, delay);
-	}
-}
-
-void Power::setInputState(bool enabled) {
-	auto begin = Utils::getTime();
- 	ALOGI("%s: enter; enabled=%d", __func__, enabled ? 1 : 0);
-
-	if (enabled) {
-		if (!mTouchControlPath.empty()) {
-			DEBUG_TIMING(touchscreen, Utils::write(mTouchControlPath, true));
-		}
-
-		if (mVariant != SecDeviceVariant::EDGE) {
-			ASYNC(DEBUG_TIMING(touchkeys_state, Utils::write(POWER_TOUCHKEYS_ENABLED, mTouchkeysEnabled)));
-			DEBUG_TIMING(touchkeys_brightness, Utils::write(POWER_TOUCHKEYS_BRIGHTNESS, 255));
-		}
-	} else {
-		if (mVariant != SecDeviceVariant::EDGE) {
-			// save to current state to prevent enabling
-			DEBUG_TIMING(touchkeys_state_read, Utils::read(POWER_TOUCHKEYS_ENABLED, mTouchkeysEnabled));
-
-			// disable them
-			DEBUG_TIMING(touchkeys_state, Utils::write(POWER_TOUCHKEYS_ENABLED, false));
-			DEBUG_TIMING(touchkeys_brightness, Utils::write(POWER_TOUCHKEYS_BRIGHTNESS, 0));
-		}
-
-		// only disable touchscreen if we aren't using DT2W
-		if (!mTouchControlPath.empty() && !mIsDT2WEnabled) {
-			DEBUG_TIMING(touchscreen, Utils::write(mTouchControlPath, false));
-		}
-	}
-
-	DEBUG_TIMING(dt2w, setDT2WState());
-
-	auto end = Utils::getTime();
-	auto diff = end - begin;
-
-	ALOGV("%s: exit; took %lldms", __func__, diff.count());
-}
-
-void Power::setFingerprintState(bool enabled) {
-	/*
-	 * vfs7xxx power management interface:
-	 *
-	 * regulator: fp sensor's main GPIO regulation pins
-	 * sleep-pin: GPIO pin setting the current power-state
-	 * SMC: secure monitor (TrustZone) call
-	 *
-	 * 1 (true)  -> power on:
-	 *   * removing internal pm management block
-	 *   * resuming debugging timer work
-	 *   * powering on regulator
-	 *       * SMC to initialize FP sensor boot
-	 *       * delaying for ~2,95-3,00ms
-	 *       * powering on ldo_pin2 GPIO pin
-	 *       * powering on ldo_pin GPIO pin
-	 *   * delaying for 10ms
-	 *   * hard resetting GPIO sleep pin
-	 *       * setting sleep pin(0)
-	 *       * delaying for 1ms
-	 *       * setting sleep pin(1)
-	 *       * delaying for 5ms
-	 *   * delaying for 20ms
-	 *
-	 * 0 (false)  -> power off:
-	 *   * powering off regulator
-	 *       * powering off ldo_pin GPIO pin
-	 *       * powering off ldo_pin2 GPIO pin
-	 *       * SMC to finish FP sensor shutdown
-	 *   * setting GPIO sleep pin
-	 *       * setting sleep pin(0)
-	 *   * stopping debugging timer work
-	 *   * setting internal pm management block
-	 */
-	if (enabled) {
-		DEBUG_TIMING(fingerprint_wakelocks, Utils::write(POWER_FINGERPRINT_WAKELOCKS, true));
-		DEBUG_TIMING(fingerprint_pm, Utils::write(POWER_FINGERPRINT_PM, true));
-	} else {
-		DEBUG_TIMING(fingerprint_pm, Utils::write(POWER_FINGERPRINT_PM, false));
-		DEBUG_TIMING(fingerprint_wakelocks, Utils::write(POWER_FINGERPRINT_WAKELOCKS, false));
+		setProfile(mRequestedProfile);
 	}
 }
 
 void Power::setDT2WState() {
 	if (mIsDT2WEnabled) {
-		Utils::write(POWER_DT2W_ENABLED, true);
+
 	} else {
-		Utils::write(POWER_DT2W_ENABLED, false);
+
 	}
 }
 

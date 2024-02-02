@@ -39,13 +39,11 @@ LOCAL_SHARED_LIBRARIES := \
 	libhidltransport \
 	liblog \
 	libutils \
-	libuniversal7420utils \
 	libpowerpulse \
 	android.hardware.power@1.0
 
 LOCAL_C_INCLUDES := \
 	external/powerpulse/lib/include
-#	external/libxml2/include \
 
 LOCAL_CFLAGS := -Wall -Werror -Wno-unused-parameter -Wno-unused-function
 
@@ -53,10 +51,6 @@ ifneq (,$(wildcard hardware/lineage/interfaces/power/1.0/ vendor/cmsdk/))
   LOCAL_SHARED_LIBRARIES += vendor.lineage.power@1.0
   LOCAL_CFLAGS += -DPOWER_HAS_LINEAGE_HINTS
 endif
-
-#ifneq (,$(wildcard hardware/nexus/interfaces/power/1.0/))
-#	LOCAL_CFLAGS += -DPOWER_HAS_NEXUS_HINTS
-#endif
 
 # Enables mutex-protection against multithreading-problems
 # but may cause deadlocks while booting. Recommended if
@@ -67,11 +61,6 @@ LOCAL_CFLAGS += -DLOCK_PROTECTION
 # This may cause errors but ensures the stability of the
 # power-HAL
 LOCAL_CFLAGS += -DSTRICT_BEHAVIOUR
-
-# Enables support for a file-based profile selection, currently
-# based on 5-second-polling. Useful on non-LineageOS
-# (e.g. AOSP) ROMs
-#LOCAL_CFLAGS += -DENABLE_PROFILES_FILE
 
 # Allow the power HAL to run on any CPU core
 LOCAL_CFLAGS += -DNR_CPUS=$(TARGET_NR_CPUS)

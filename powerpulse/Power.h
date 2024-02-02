@@ -41,7 +41,7 @@ using std::ostringstream;
 #define POWER_DT2W_ENABLED                "/sys/class/dt2w/enabled"
 #define POWER_TOUCHKEYS_ENABLED           "/sys/class/sec/sec_touchkey/input/enabled"
 #define POWER_TOUCHKEYS_BRIGHTNESS        "/sys/class/sec/sec_touchkey/brightness"
-#define POWER_FINGERPRINT_PM			  "/sys/class/fingerprint/fingerprint/pm"
+#define POWER_FINGERPRINT_PM		  "/sys/class/fingerprint/fingerprint/pm"
 #define POWER_FINGERPRINT_WAKELOCKS       "/sys/class/fingerprint/fingerprint/wakelocks"
 
 #define POWER_TOUCHSCREEN_NAME            "/sys/class/input/input1/name"
@@ -50,58 +50,6 @@ using std::ostringstream;
 #define POWER_TOUCHSCREEN_ENABLED_EDGE    "/sys/class/input/input0/enabled"
 
 #define POWER_PROFILE_POLLING_FILE        "/data/.power-profile"
-
-#define __CPU_ONLINE(core, state) \
-{ \
-	ostringstream cpu_state_path; \
-	cpu_state_path << "/sys/devices/system/cpu/cpu" << core << "/online"; \
-	Utils::write(cpu_state_path.str().c_str(), !!state); \
-}
-
-#define CPU_OFFLINE(core)  __CPU_ONLINE(core, 0)
-#define CPU_ONLINE(core)  __CPU_ONLINE(core, 1)
-
-#define __CPU_ONLINE_ALL(state) \
-{ \
-	for (int __coai = 0; __coai < NR_CPUS; __coai++) \
-		__CPU_ONLINE(__coai, state) \
-}
-
-#define CPU_OFFLINE_ALL()  __CPU_ONLINE_ALL(0)
-#define CPU_ONLINE_ALL()  __CPU_ONLINE_ALL(1)
-
-/*
- * Write cpugov-independent settings
- */
-// single-argument macro, var == filename
-#define __cpu_cluster_write(core, cluster, var)  Utils::writeCpuGov(core, #var, data->cpu.cluster.var)
-#define cpu_apollo_write(var)  __cpu_cluster_write(0, apollo, var)
-#define cpu_atlas_write(var)  __cpu_cluster_write(4, atlas, var)
-
-// double-argument macro, var != filename
-#define __cpu_cluster_write2(core, cluster, var, file)  Utils::writeCpuGov(core, file, data->cpu.cluster.var)
-#define cpu_apollo_write2(var, file)  __cpu_cluster_write2(0, apollo, var, file)
-#define cpu_atlas_write2(var, file)  __cpu_cluster_write2(4, atlas, var, file)
-
-/*
- * Write cpugov-specific settings
- */
-// single-argument macro, var == filename
-#define __cpugov_cluster_write(cpugov, core, cluster, var)  Utils::writeCpuGov(core, #var, data->cpu.cluster.cpugov.var)
-#define cpugov_apollo_write(cpugov, var)  __cpugov_cluster_write(cpugov, 0, apollo, var)
-#define cpugov_atlas_write(cpugov, var)  __cpugov_cluster_write(cpugov, 4, atlas, var)
-
-// double-argument macro, var != filename
-#define __cpugov_cluster_write2(cpugov, core, cluster, var, file)  Utils::writeCpuGov(core, file, data->cpu.cluster.cpugov.var)
-#define cpugov_apollo_write2(cpugov, var, file)  __cpugov_cluster_write2(cpugov, 0, apollo, var, file)
-#define cpugov_atlas_write2(cpugov, var, file)  __cpugov_cluster_write2(cpugov, 4, atlas, var, file)
-
-/*
- * Assert cpugovs
- */
-#define __if_cluster_cpugov(core, gov)  if (Utils::assertCpuGov(core, gov))
-#define if_apollo_cpugov(gov)  __if_cluster_cpugov(0, gov)
-#define if_atlas_cpugov(gov)  __if_cluster_cpugov(4, gov)
 
 /*
  * Quick-Casts
@@ -181,7 +129,7 @@ enum class SecDeviceVariant : int32_t {
 	EDGE = 2,
 };
 
-struct Power : 
+struct Power :
       public IPower
 #ifdef POWER_HAS_LINEAGE_HINTS
     , public ILineagePower
@@ -209,7 +157,7 @@ private:
 	mutable std::mutex mLock;
 #endif
 	mutable std::mutex mBoostpulseLock;
-	
+
 	// Stores the current interactive-state of the device
 	// Default to <false>.
 	bool mIsInteractive;
@@ -225,12 +173,12 @@ private:
 	// The device-variant this power-service is currently running on
 	// Default to <UNKNOWN>.
 	SecDeviceVariant mVariant;
-	
+
 	// The path to control the state of the touchscreen. May vary between
 	// different variants.
 	// Default to <"">.
 	string mTouchControlPath;
-	
+
 	// Stores the current state of the touchkeys to prevent accidental
 	// enabling if user decidec to use on-screen-navbar and disabled them
 	// Default to <true>.
@@ -251,28 +199,17 @@ private:
 	// Default to UNKNOWN
 	void setProfile(SecPowerProfiles profile);
 
-	// Set the current profile to [profile]. Also updates mCurrentProfile.
-	// Default to UNKNOWN
-	void setProfile(SecPowerProfiles profile, int delay);
-
 	// Either resets the current profile to mRequestedProfile or
 	// falls back to BALANCED if mRequestedProfile is set to INVALID.
-	void resetProfile(int delay = 0);
+	void resetProfile();
 
-	// updates the current state of managed input-devices.
-	void setInputState(bool enabled);
-
-	// updates the current state the fingerprint-sensor
-	void setFingerprintState(bool enabled);
-
-	// updates the current state the doubletap2wake-capability. uses the 
+	// updates the current state the doubletap2wake-capability. uses the
 	// global member [mIsDT2WEnabled] to determine the new state
 	void setDT2WState();
 
 	// fetches the correct property and checks if the user disable
 	// a specific power-module.
 	bool isModuleEnabled(string module);
-
 };
 
 }  // namespace implementation
