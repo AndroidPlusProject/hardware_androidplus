@@ -82,20 +82,19 @@ Return<void> Power::setInteractive(bool interactive) {
 	ALOGV("%s: enter; interactive=%d", __func__, interactive ? 1 : 0);
 	power_lock();
 
-	this->mIsInteractive = interactive;
+	PowerPulse_SetInteractive(interactive);
 
-	if (!interactive) {
-		setProfile(SecPowerProfiles::SCREEN_OFF);
-	} else {
-		// reset to requested- or fallback-profile
-		resetProfile();
-	}
+	this->mIsInteractive = interactive;
 	return Void();
 }
 
 Return<void> Power::powerHint(PowerHint hint, int32_t data)  {
 	ALOGV("%s: enter; hint=%d, data=%d", __func__, hint, data);
 	power_lock();
+
+	GoInt32 powerHint = (GoInt32) hint;
+	GoInt32 powerData = (GoInt32) data;
+	PowerPulse_SetPowerHint(powerHint, powerData);
 
 	switch_uint32_t (hint)
 	{
@@ -171,6 +170,9 @@ Return<void> Power::setFeature(Feature feature, bool activate)  {
 	ALOGV("%s: enter; feature=%d, activate=%d", __func__, feature, activate ? 1 : 0);
 	power_lock();
 
+	int32_t feat = (int32_t) feature;
+	PowerPulse_SetFeature(feat, activate);
+
 	switch_uint32_t (feature)
 	{
 		case_uint32_t (Feature::POWER_FEATURE_DOUBLE_TAP_TO_WAKE):
@@ -201,6 +203,10 @@ Return<void> Power::getPlatformLowPowerStats(getPlatformLowPowerStats_cb _hidl_c
 Return<int32_t> Power::getFeature(LineageFeature feature)  {
 	ALOGV("%s: enter; feature=%d", __func__, feature);
 	power_lock();
+
+	uint32_t feat = (uint32_t) feature;
+	int32_t resp = PowerPulse_GetFeature(feat);
+	ALOGV("getFeature: %d %d", feat, resp);
 
 	switch_uint32_t (feature)
 	{
@@ -238,22 +244,14 @@ void Power::setProfile(SecPowerProfiles profile) {
 	}
 
 	char* profileName = (char*) SecPowerProfilesToString(profile);
-	if (SecPowerProfilesToString(mCurrentProfile) == profileName) {
-		ALOGI("%s: already applied profile %s (%d)", __func__, profileName, profile);
-		return;
-	}
-	mCurrentProfile = profile;
 
  	ALOGI("%s: applying profile %s (%d)", __func__, profileName, profile);
 	PowerPulse_SetProfile(profileName);
 }
 
 void Power::resetProfile() {
-	if (mRequestedProfile == SecPowerProfiles::INVALID) {
-		setProfile(SecPowerProfiles::BALANCED);
-	} else {
-		setProfile(mRequestedProfile);
-	}
+	ALOGI("%s: resetting profile", __func__);
+	PowerPulse_ResetProfile();
 }
 
 void Power::setDT2WState() {

@@ -3,4 +3,4 @@ service power-hal-1-0 /vendor/bin/hw/android.hardware.power@1.0-service.powerpul
     user root
     group root
     ioprio rt 4
-    writepid /dev/cpuset/foreground/tasks
+    writepid /dev/cpuset/top-app/tasks
