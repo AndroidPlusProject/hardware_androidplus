@@ -19,12 +19,12 @@ LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
 
-LOCAL_MODULE               := android.hardware.power@1.0-service.powerpulse
+LOCAL_MODULE               := android.hardware.power@1.3-service.powerpulse
 LOCAL_MODULE_RELATIVE_PATH := hw
 LOCAL_MODULE_TAGS          := optional
 LOCAL_PROPRIETARY_MODULE   := true
 
-LOCAL_INIT_RC := android.hardware.power@1.0-service.powerpulse.rc
+LOCAL_INIT_RC := android.hardware.power@1.3-service.powerpulse.rc
 
 LOCAL_SRC_FILES := \
 	Service.cpp \
@@ -40,7 +40,8 @@ LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libutils \
 	libpowerpulse \
-	android.hardware.power@1.0
+	android.hardware.power@1.0 \
+	android.hardware.power@1.3
 
 LOCAL_C_INCLUDES := \
 	external/powerpulse/lib/include
@@ -51,11 +52,6 @@ ifneq (,$(wildcard hardware/lineage/interfaces/power/1.0/ vendor/cmsdk/))
   LOCAL_SHARED_LIBRARIES += vendor.lineage.power@1.0
   LOCAL_CFLAGS += -DPOWER_HAS_LINEAGE_HINTS
 endif
-
-# Enables mutex-protection against multithreading-problems
-# but may cause deadlocks while booting. Recommended if
-# problems can be traced back to overlapping HAL-calls
-LOCAL_CFLAGS += -DLOCK_PROTECTION
 
 # Enforces strict limitations of rules present in power-HAL.
 # This may cause errors but ensures the stability of the

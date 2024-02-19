@@ -16,10 +16,10 @@
  * limitations under the License.
  */
 
-#ifndef ZERO_HARDWARE_POWER_V1_0_POWER_H
-#define ZERO_HARDWARE_POWER_V1_0_POWER_H
+#ifndef ZERO_HARDWARE_POWER_V1_3_POWER_H
+#define ZERO_HARDWARE_POWER_V1_3_POWER_H
 
-#include <android/hardware/power/1.0/IPower.h>
+#include <android/hardware/power/1.3/IPower.h>
 
 #ifdef POWER_HAS_LINEAGE_HINTS
 #include <vendor/lineage/power/1.0/ILineagePower.h>
@@ -59,7 +59,7 @@ using std::ostringstream;
 namespace android {
 namespace hardware {
 namespace power {
-namespace V1_0 {
+namespace V1_3 {
 namespace implementation {
 
 using ::android::hardware::power::V1_0::Feature;
@@ -141,13 +141,13 @@ struct Power :
 
 	status_t registerAsSystemService();
 
-	// Methods from ::android::hardware::power::V1_0::IPower follow.
+	// Methods from ::android::hardware::power::V1_3::IPower follow.
 	Return<void> setInteractive(bool interactive)  override;
 	Return<void> powerHint(PowerHint hint, int32_t data)  override;
 	Return<void> setFeature(Feature feature, bool activate)  override;
 	Return<void> getPlatformLowPowerStats(getPlatformLowPowerStats_cb _hidl_cb)  override;
 
-	// Methods from ::vendor::lineage::power::V1_0::ILineagePower follow.
+	// Methods from ::vendor::lineage::power::V1_3::ILineagePower follow.
 #ifdef POWER_HAS_LINEAGE_HINTS
 	Return<int32_t> getFeature(LineageFeature feature)  override;
 #endif
@@ -213,9 +213,9 @@ private:
 };
 
 }  // namespace implementation
-}  // namespace V1_0
+}  // namespace V1_3
 }  // namespace power
 }  // namespace hardware
 }  // namespace android
 
-#endif  // ZERO_HARDWARE_POWER_V1_0_POWER_H
+#endif  // ZERO_HARDWARE_POWER_V1_3_POWER_H

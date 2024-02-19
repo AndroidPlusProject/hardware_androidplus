@@ -33,7 +33,7 @@ using android::sp;
 using android::status_t;
 using android::OK;
 
-using android::hardware::power::V1_0::implementation::Power;
+using android::hardware::power::V1_3::implementation::Power;
 
 int main() {
 	status_t status;
